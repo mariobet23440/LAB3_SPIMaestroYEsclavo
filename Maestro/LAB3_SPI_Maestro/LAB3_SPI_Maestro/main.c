@@ -52,6 +52,7 @@ volatile uint8_t spi_tx_byte = SPI_CMD_GET1;
 // Variables globales
 volatile uint8_t v1 = 0;
 volatile uint8_t v2 = 0;
+volatile uint8_t  next_tx_byte = DUMMY;
 
 typedef enum
 {
@@ -102,10 +103,10 @@ MAINLOOP
 int main(void)
 {
     setup();
-	
-	UART_sendString("-------------------------------------------------------------------- \r\n");
-	UART_sendString("|LABORATORIO 3 - COMUNICACIÓN SPI                                  | \r\n");
-	UART_sendString("-------------------------------------------------------------------- \r\n");
+
+	UART_sendString("----------------------------------------------------------------------------------------- \r\n");
+	UART_sendString("| LABORATORIO 3 - COMUNICACIÓN SPI - MAESTRO                                             | \r\n");
+	UART_sendString("----------------------------------------------------------------------------------------- \r\n");
 	
 	char mensaje[80]; // Buffer para construir la cadena
    
@@ -114,7 +115,7 @@ int main(void)
     {
 		// Formateamos la cadena:
 		// %03u indica un entero sin signo (uint8_t), de 3 dígitos, rellenado con '0'
-		sprintf(mensaje, "| POTENCIOMETRO 1 : %03u | POTENCIOMETRO 2 = %03u | UART VALUE = %03u | \r\n", v1, v2, uart_value);
+		sprintf(mensaje, "| POTENCIOMETRO 1 : %03u | POTENCIOMETRO 2 = %03u | UART VALUE = %03u | NEXT_TX_BYTE = %03u | \r\n", v1, v2, uart_value, next_tx_byte);
 		
 		// Enviamos la cadena completa por UART
 		UART_sendString(mensaje);
@@ -155,7 +156,6 @@ ISR(SPI_STC_vect)
 	// =========================================================
 
 	// Variables locales para la salida
-	uint8_t  next_tx_byte = DUMMY;
 	COMMAND  next_spi_cmd = spi_curr_cmd;
 
 	// --- Prioridad UART ---
@@ -178,35 +178,35 @@ ISR(SPI_STC_vect)
 		switch (spi_curr_cmd)
 		{
 			case SPI_CMD_GET1:
-			next_tx_byte = SPI_CMD_GET1;
-			next_spi_cmd = SPI_SEND_DUMMY;
+				next_tx_byte = SPI_CMD_GET1;
+				next_spi_cmd = SPI_SEND_DUMMY;
 			break;
 
 			case SPI_CMD_GET2:
-			next_tx_byte = SPI_CMD_GET2;
-			next_spi_cmd = SPI_SEND_DUMMY;
+				next_tx_byte = SPI_CMD_GET2;
+				next_spi_cmd = SPI_SEND_DUMMY;
 			break;
 
 			case SPI_SEND_DUMMY:
-			next_tx_byte = DUMMY;
+				next_tx_byte = DUMMY;
 
-			if (spi_tx_byte == SPI_CMD_GET1)
-			{
-				pending_cmd  = SPI_CMD_GET1;
-				next_spi_cmd = SPI_CMD_GET2;
-				spi_tx_byte  = SPI_CMD_GET2;
-			}
-			else
-			{
-				pending_cmd  = SPI_CMD_GET2;
-				next_spi_cmd = SPI_CMD_GET1;
-				spi_tx_byte  = SPI_CMD_GET1;
-			}
+				if (spi_tx_byte == SPI_CMD_GET1)
+				{
+					pending_cmd  = SPI_CMD_GET1;
+					next_spi_cmd = SPI_CMD_GET2;
+					spi_tx_byte  = SPI_CMD_GET2;
+				}
+				else
+				{
+					pending_cmd  = SPI_CMD_GET2;
+					next_spi_cmd = SPI_CMD_GET1;
+					spi_tx_byte  = SPI_CMD_GET1;
+				}
 			break;
 
 			default:
-			next_spi_cmd = SPI_CMD_GET1;
-			next_tx_byte = SPI_CMD_GET1;
+				next_spi_cmd = SPI_CMD_GET1;
+				next_tx_byte = SPI_CMD_GET1;
 			break;
 		}
 	}
