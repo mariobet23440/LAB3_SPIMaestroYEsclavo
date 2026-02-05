@@ -12,37 +12,22 @@
 /*********************************************************************************************************
 FUNCIÓN DE INICIALIZACIÓN SPI
 **********************************************************************************************************/
-void SPI_Init(SPI_CONFIG config, SPI_CLOCK_MODE clock_mode, SPI_DORD data_order, SPI_INTERRUPT_CONFIG en_interrupts)
-{
-	// CONFIGURACIÓN EN REGISTRO DE CONTROL Y ESTATUS
-	// Habilitar SPI
-	SPCR = (1 << SPE);
+void SPI_Init(SPI_CONFIG config, SPI_CLOCK_MODE clock_mode, SPI_DORD data_order, SPI_INTERRUPT_CONFIG en_interrupts) {
+	// 1. Limpiar y configurar SPCR (Usamos la máscara 0x03 para SPR1:0)
+	SPCR = (1 << SPE) | (config & 0x53) | clock_mode | data_order;
 	
-	// Habilitar interrupciones
-	if(en_interrupts == SPI_INTERRUPTS_ENABLED) SPCR |= (1 << SPIE);	
-	
-	// Aplicar máscara sobre config (Descartar MSB de presets)
-	uint8_t temp = config & ((1 << MSTR) | (1 << SPR1) | (1 << SPR0)); 
-	SPCR |= (config | clock_mode | data_order);
-	
-	// Prescalers de velocidad doble
-	switch(config)
-	{
-		case MASTER_PRESCALER_4:	break;
-		case MASTER_PRESCALER_16:	break;
-		case MASTER_PRESCALER_128:	break;
-		case MASTER_PRESCALER_64:	SPSR |= (1 << SPI2X); break;
-		case MASTER_PRESCALER_2:	SPSR |= (1 << SPI2X); break;
-		case MASTER_PRESCALER_8:	SPSR |= (1 << SPI2X); break;
-		case MASTER_PRESCALER_32:	SPSR |= (1 << SPI2X); break;
-		case SLAVE_SS:				break;
+	if(en_interrupts == SPI_INTERRUPTS_ENABLED) SPCR |= (1 << SPIE);
+
+	// 2. Configurar SPI2X en SPSR si la bandera 0x04 está presente
+	if (config & 0x04) SPSR |= (1 << SPI2X);
+	else SPSR &= ~(1 << SPI2X);
+
+	// 3. Puertos (Usando |= para no destruir otras configs)
+	if(config & (1 << MSTR)) {
+		DDR_SPI |= (1 << DD_MOSI) | (1 << DD_SCK) | (1 << DD_SS); // SS como salida por seguridad
+		} else {
+		DDR_SPI |= (1 << DD_MISO);
 	}
-	
-	// INICIALIZACIÓN DE PUERTOS
-	// En modo maestro MOSI y SCK son salidas
-	if(temp & (1 << MSTR)) DDR_SPI	 =  (1 << DD_MOSI) | (1 << DD_SCK);
-	// En modo esclavo MISO es salidas
-	else DDR_SPI = (1 << DD_MISO);
 }
 
 /*********************************************************************************************************
@@ -72,7 +57,7 @@ INTERCAMBIO DE BITS (CONSULTA DESDE MAESTRO)
 **********************************************************************************************************/
 uint8_t SPI_Master_Query(volatile uint8_t *slave_port, uint8_t slave_pin, uint8_t command)
 {
-	// Encender pin de esclavo
+	// Encender apagar pin de esclavo
 	*slave_port &= ~(1 << slave_pin);
 	
 	// Esta función se realiza en dos ciclos de reloj
@@ -81,6 +66,8 @@ uint8_t SPI_Master_Query(volatile uint8_t *slave_port, uint8_t slave_pin, uint8_
 	
 	// 2. Intercambiar un byte dummy por el byte solicitado por el comando
 	SPI_Transmit(0X00);
+	
+	*slave_port |= (1 << slave_pin);
 	
 	// Mostrar la salida obtenida
 	return SPDR;

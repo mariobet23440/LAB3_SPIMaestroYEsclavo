@@ -26,6 +26,9 @@ typedef enum
 	SPI_SEND_DUMMY	= 0X04
 } COMMAND;
 
+const char* status_text = "IDLE";
+
+
 volatile uint8_t *LED_ports[8] = { &PORTD, &PORTD, &PORTD, &PORTD,
 								   &PORTD, &PORTD, &PORTB, &PORTB };
 
@@ -35,17 +38,16 @@ uint8_t LED_pins[8] = { PORTD2, PORTD3, PORTD4, PORTD5 ,
 volatile uint8_t *LED_ddrs[8] = { &DDRD, &DDRD, &DDRD, &DDRD,
 								  &DDRD, &DDRD, &DDRB, &DDRB };
 								  
-#define CMD_GET_POT1 0X01
-#define CMD_GET_POT2 0X02
-#define CMD_SET_LEDS 0X03
-
+								  
 volatile uint8_t adc_curr_channel = 0;
 volatile uint8_t adc_chan1 = 0;
 volatile uint8_t adc_chan2 = 1; 
+
 volatile uint8_t pot1_value = 0;
 volatile uint8_t pot2_value = 0;
 
-volatile uint8_t uart_value = 5;
+// Número enviado desde computadora
+volatile uint8_t computer_data = 5;
 
 /*-------------------------------------------------------------------
 / PROTOTIPOS DE FUNCIONES
@@ -69,6 +71,7 @@ void setup(void){
 	
 	// Inicializar SPI
 	SPI_Init(SLAVE_SS, MODE0_LE_SAMPLE_RISING, LSB_FIRST, SPI_INTERRUPTS_ENABLED);
+	SPDR = 0X00; // Dummy
 	
 	UART_Init(UART_BAUD_9600_16MHZ, UART_INTERRUPTS_DISABLED);
 	sei();
@@ -80,6 +83,7 @@ void setup(void){
 int main(void){
 	setup();
 	
+	UART_sendString("\r\n");
 	UART_sendString("-------------------------------------------------------------------- \r\n");
 	UART_sendString("| LABORATORIO 3 - COMUNICACIÓN SPI - ESCLAVO                       | \r\n");
 	UART_sendString("-------------------------------------------------------------------- \r\n");
@@ -100,7 +104,7 @@ int main(void){
 		
 		// Formateamos la cadena:
 		// %03u indica un entero sin signo (uint8_t), de 3 dígitos, rellenado con '0'
-		sprintf(mensaje, "| POTENCIOMETRO 1 : %03u | POTENCIOMETRO 2 = %03u | UART VALUE = %03u | \r\n", pot1_value, pot2_value, uart_value);
+		sprintf(mensaje, "| POTENCIOMETRO 1 : %03u | POTENCIOMETRO 2 = %03u | UART VALUE = %03u | SPI STATUS : %s \r\n", pot1_value, pot2_value, computer_data, status_text);
 		
 		// Enviamos la cadena completa por UART
 		UART_sendString(mensaje);
@@ -113,16 +117,24 @@ int main(void){
 /*-------------------------------------------------------------------
 / RUTINAS DE INTERRUPCIÓN
 /-------------------------------------------------------------------*/
+// Configurar siguiente recepción
 ISR(SPI_STC_vect)
 {
 	// Dato recibido
-	uint8_t rx = SPDR;
+	uint8_t message = SPDR;
 	
-	if(rx == SPI_CMD_GET1){
+	if(message == SPI_CMD_GET1){
 		SPDR = pot1_value;
+		status_text = "GET1";
 	}
-	else if(rx == SPI_CMD_GET2){
+	else if(message == SPI_CMD_GET2){
 		SPDR = pot2_value;
+		status_text = "GET2";
+	}
+	else
+	{
+		SPDR = 0x00;
+		status_text = "NONE";
 	}
 }
 
