@@ -9,16 +9,19 @@
 #include <avr/interrupt.h>
 #include <util/delay.h>
 #include <stdio.h>
+#include <stdlib.h> // Necesaria para atoi()
 #include "UART.h"
 
 #define CMD_GET1     0x11
 #define CMD_GET2     0x22
 #define CMD_SET_LEDS 0x33
 
-volatile uint8_t dato_pc = 0;
-volatile uint8_t bandera_uart = 0;
+// --- Variables para el procesamiento de UART ---
+char rx_buffer[10];            // Buffer para guardar los dígitos (ej: "255")
+volatile uint8_t rx_index = 0; // Índice del buffer
+volatile uint8_t valor_final = 0;
+volatile uint8_t listo_para_enviar = 0;
 
-// Función de intercambio que ya probamos
 uint8_t SPI_Transfer(uint8_t data) {
 	SPDR = data;
 	while (!(SPSR & (1 << SPIF)));
@@ -34,20 +37,25 @@ int main(void) {
 	SPCR = (1 << SPE) | (1 << MSTR) | (1 << SPR1) | (1 << SPR0);
 
 	sei();
-	char buffer[50];
+	char msg[50];
 
 	while (1) {
-		// --- TAREA A: ¿Hay dato nuevo de la PC? ---
-		if (bandera_uart) {
+		// --- TAREA NUEVA: ¿El usuario mandó un número por UART? ---
+		if (listo_para_enviar) {
 			PORTB &= ~(1 << PORTB2);
-			SPI_Transfer(CMD_SET_LEDS); // Avisar al esclavo
+			SPI_Transfer(CMD_SET_LEDS); // Aviso al esclavo
 			_delay_us(20);
-			SPI_Transfer(dato_pc);      // Enviar el dato real
+			SPI_Transfer(valor_final);  // Enviamos el número convertido (0-255)
 			PORTB |= (1 << PORTB2);
-			bandera_uart = 0;           // Limpiar bandera
+			
+			listo_para_enviar = 0;      // Reset bandera
+			
+			// Confirmación opcional a la PC
+			sprintf(msg, "Enviado al Esclavo: %d\r\n", valor_final);
+			UART_sendString(msg);
 		}
 
-		// --- TAREA B: Pedir Potenciómetros (Tu lógica anterior) ---
+		// --- TAREA ANTERIOR: Pedir Potenciómetros (Se mantiene igual) ---
 		uint8_t p1, p2;
 		
 		PORTB &= ~(1 << PORTB2);
@@ -64,17 +72,32 @@ int main(void) {
 		p2 = SPI_Transfer(0xFF);
 		PORTB |= (1 << PORTB2);
 
-		// Reportar a la PC
-		sprintf(buffer, "P1:%d P2:%d\r\n", p1, p2);
-		UART_sendString(buffer);
+		sprintf(msg, "Pot1:%d Pot2:%d\r\n", p1, p2);
+		UART_sendString(msg);
 
-		_delay_ms(200);
+		_delay_ms(250);
 	}
 }
 
+// --- Interrupción de UART: Captura y construye el número ---
 ISR(USART_RX_vect) {
-	dato_pc = UDR0;
-	bandera_uart = 1;
+	char c = UDR0; // Leer carácter
+
+	// Si es un número, guardarlo en el buffer
+	if (c >= '0' && c <= '9') {
+		if (rx_index < 5) { // Evitar desbordamiento
+			rx_buffer[rx_index++] = c;
+		}
+	}
+	// Si es fin de línea (Enter), procesar
+	else if (c == '\r' || c == '\n') {
+		if (rx_index > 0) {
+			rx_buffer[rx_index] = '\0';      // Terminar la cadena de texto
+			valor_final = (uint8_t)atoi(rx_buffer); // Convertir "123" -> 123
+			listo_para_enviar = 1;           // Levantar bandera para el main
+			rx_index = 0;                    // Reset buffer para el próximo número
+		}
+	}
 }
 
 
