@@ -3,7 +3,7 @@
  * SPI.h
  *
  * Creada: 3/02/2026
- * Autor: Mario Alejandro Betancourt Franco
+ * Autor: Pablo Mazariegos (Adaptada por Mario Betancourt y David Carranza)
  * Modificada: Ajuste de máscaras y prescalers
  */ 
 

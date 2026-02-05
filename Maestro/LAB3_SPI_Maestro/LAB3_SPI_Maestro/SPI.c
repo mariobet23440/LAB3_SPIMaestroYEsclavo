@@ -3,7 +3,7 @@
  * SPI.c
  *
  * Creada: 3/02/2026 21:29:29
- * Autor: Mario Alejandro Betancourt Franco
+ * Autor:  Pablo Mazariegos (Adaptada por Mario Betancourt y David Carranza)
  * Updates : Generalización de función de inicialización
  */ 
 
