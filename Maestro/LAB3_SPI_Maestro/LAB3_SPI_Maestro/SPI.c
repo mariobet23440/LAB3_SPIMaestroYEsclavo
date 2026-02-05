@@ -14,7 +14,7 @@ FUNCIÓN DE INICIALIZACIÓN SPI
 **********************************************************************************************************/
 void SPI_Init(SPI_CONFIG config, SPI_CLOCK_MODE clock_mode, SPI_DORD data_order, SPI_INTERRUPT_CONFIG en_interrupts) {
 	// 1. Limpiar y configurar SPCR (Usamos la máscara 0x03 para SPR1:0)
-	SPCR = (1 << SPE) | (config & 0x53) | clock_mode | data_order;
+	SPCR = (1 << SPE) | (config & 0x07) | clock_mode | data_order;
 	
 	if(en_interrupts == SPI_INTERRUPTS_ENABLED) SPCR |= (1 << SPIE);
 

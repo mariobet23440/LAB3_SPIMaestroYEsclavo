@@ -35,8 +35,8 @@ typedef enum
 
 typedef enum
 {
-	LSB_FIRST = 0,
-	MSB_FIRST = (1 << DORD)
+	LSB_FIRST = (1 << DORD),
+	MSB_FIRST = 0
 	
 } SPI_DORD;
 

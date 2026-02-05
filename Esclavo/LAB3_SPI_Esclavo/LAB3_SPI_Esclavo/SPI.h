@@ -20,16 +20,17 @@ LIBRERÍAS
 /*********************************************************************************************************
 ENUMERACIONES
 **********************************************************************************************************/
-typedef enum {
-	// Usamos los bits SPR1 y SPR0, y el bit 2 como bandera para SPI2X
-	MASTER_PRESCALER_4   = (1 << MSTR),
-	MASTER_PRESCALER_16  = (1 << MSTR) | (1 << SPR0),
-	MASTER_PRESCALER_64  = (1 << MSTR) | (1 << SPR1),
-	MASTER_PRESCALER_128 = (1 << MSTR) | (1 << SPR1) | (1 << SPR0),
-	MASTER_PRESCALER_2   = (1 << MSTR) | 0x04, // Flag manual para SPI2X
-	MASTER_PRESCALER_8   = (1 << MSTR) | (1 << SPR0) | 0x04,
-	MASTER_PRESCALER_32  = (1 << MSTR) | (1 << SPR1) | 0x04,
-	SLAVE_SS             = 0x00
+typedef enum
+{
+	MASTER_PRESCALER_4		= (1 << MSTR),
+	MASTER_PRESCALER_16		= (1 << MSTR) | (1 << SPR0),
+	MASTER_PRESCALER_64		= (1 << MSTR) | (1 << SPR1),
+	MASTER_PRESCALER_128	= (1 << MSTR) | (1 << SPR1) | (1 << SPR0),
+	MASTER_PRESCALER_2		= (1 << MSTR) | (1 << 0x07),
+	MASTER_PRESCALER_8		= (1 << MSTR) | (1 << SPR0) | (1 << 0x07),
+	MASTER_PRESCALER_32		= (1 << MSTR) | (1 << SPR1) | (1 << 0x07),
+	SLAVE_SS				= 0x00
+	
 } SPI_CONFIG;
 
 typedef enum
