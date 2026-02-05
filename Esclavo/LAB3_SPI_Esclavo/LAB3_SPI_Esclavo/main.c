@@ -8,7 +8,9 @@
 / LIBRERÍAS
 /-------------------------------------------------------------------*/
 #include <avr/io.h>
+#include <avr/interrupt.h>
 #include "SPI.h"
+#include "ADC.h"
 
 /*-------------------------------------------------------------------
 / ESTRUCTURAS DE DATOS Y VARIABLES GLOBALES
@@ -21,7 +23,7 @@ PORTD6, PORTD7, PORTB0, PORTB1 };
 
 volatile uint8_t *LED_ddrs[8] = { &DDRD, &DDRD, &DDRD, &DDRD,
 								  &DDRD, &DDRD, &DDRB, &DDRB };
-
+								  
 /*-------------------------------------------------------------------
 / PROTOTIPOS DE FUNCIONES
 /-------------------------------------------------------------------*/
@@ -31,24 +33,54 @@ void WritePORT(uint8_t number);
 /*-------------------------------------------------------------------
 / MAINLOOP
 /-------------------------------------------------------------------*/
-#include <avr/io.h>
+// Variables para guardar los valores de los potenciómetros
+volatile uint8_t pot1 = 0;
+volatile uint8_t pot2 = 0;
+
+#define CMD_GET1 0x11
+#define CMD_GET2 0x22
+
+
+
 
 int main(void) {
-	// Configurar PORTD como salida para ver los datos
-	DDRD = 0xFF;
+	InitPORT();
+	DDRB |= (1 << DDB4); // MISO salida
 	
-	// Configurar MISO como salida, SS como entrada
-	DDRB = (1 << DDB4);
+	ADC_Init(0, 1, 0x07, 0, 0);
+
+	// Inicializar SPI con INTERRUPCIONES habilitadas
+	// SPE=1, SPIE=1 (Interrupción habilitada)
+	SPCR = (1 << SPE) | (1 << SPIE);
 	
-	// Habilitar SPI en modo Esclavo, Mode 0
-	SPCR = (1 << SPE);
+	sei(); // Habilitar interrupciones globales
 
 	while (1) {
-		// ¿Llegó algo?
-		if (SPSR & (1 << SPIF)) {
-			uint8_t temp = SPDR; // Mostrar inmediatamente en los LEDs
-			WritePORT(temp);
-		}
+		// El ADC sigue su vida aquí, tranquilamente
+		ADC_SetChannel(0);
+		ADC_StartConversion();
+		while(ADCSRA & (1 << ADSC));
+		pot1 = ADCH;
+
+		ADC_SetChannel(1);
+		ADC_StartConversion();
+		while(ADCSRA & (1 << ADSC));
+		pot2 = ADCH;
+	}
+}
+
+// Esta función se ejecuta SOLA cada vez que llega un byte por SPI
+ISR(SPI_STC_vect) {
+	uint8_t comando = SPDR; // Leemos el comando que llegó
+	
+	if (comando == CMD_GET1) {
+		SPDR = pot1; // Cargamos la respuesta inmediatamente
+	}
+	else if (comando == CMD_GET2) {
+		SPDR = pot2;
+	}
+	else {
+		// WritePORT(comando); // Opcional: ver dummies o comandos en LEDs
 	}
 }
 

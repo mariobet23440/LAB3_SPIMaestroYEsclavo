@@ -7,48 +7,65 @@
 #define F_CPU 16000000UL
 #include <avr/io.h>
 #include <util/delay.h>
+#include <stdio.h>    // Para sprintf
+#include "UART.h"
+
+// Definición de comandos
+#define CMD_GET1 0x11
+#define CMD_GET2 0x22
+
+// Prototipo de intercambio SPI
+uint8_t SPI_Transfer(uint8_t data);
 
 int main(void) {
-	// 1. CONFIGURACIÓN DE PINES (Hardware Directo)
-	// MOSI (PB3), SCK (PB5) y SS (PB2) deben ser SALIDAS.
-	DDRB |= (1 << DDB3) | (1 << DDB5) | (1 << DDB2);
+	// 1. INICIALIZAR UART (9600 bps)
+	UART_Init(UART_BAUD_9600_16MHZ, UART_INTERRUPTS_DISABLED);
 	
-	// MISO (PB4) debe ser entrada (ya lo es por defecto)
-	DDRB &= ~(1 << DDB4);
-
-	// 2. CONFIGURACIÓN DEL SPI (Registro SPCR)
-	// SPE  = 1 (Habilitar SPI)
-	// MSTR = 1 (Modo Maestro)
-	// SPR1 = 1, SPR0 = 1 (Prescaler 128 -> La velocidad más lenta y segura)
+	// 2. INICIALIZAR SPI (Registros Puros)
+	// MOSI (PB3), SCK (PB5) y SS (PB2) como salidas
+	DDRB |= (1 << DDB3) | (1 << DDB5) | (1 << DDB2);
+	// SS en alto (IDLE)
+	PORTB |= (1 << PORTB2);
+	
+	// SPCR: Habilitar, Maestro, Fosc/128 (Seguridad máxima)
 	SPCR = (1 << SPE) | (1 << MSTR) | (1 << SPR1) | (1 << SPR0);
 
-	// Aseguramos que el pin SS empiece en ALTO (Esclavo desactivado)
-	PORTB |= (1 << PORTB2);
+	char msg_buffer[50];
+	uint8_t pot1_val, pot2_val;
 
-	uint8_t contador = 0;
+	UART_sendString("--- Sistema de Monitoreo Iniciado ---\r\n");
 
 	while (1) {
-		// --- PASO 1: ACTIVAR ESCLAVO ---
-		PORTB &= ~(1 << PORTB2); // Bajar SS a 0V
-		_delay_us(10);           // Pequeño margen de estabilización
+		// --- OBTENER POT 1 ---
+		PORTB &= ~(1 << PORTB2);     // SS LOW
+		SPI_Transfer(CMD_GET1);      // Paso 1: Enviar comando
+		_delay_us(10);               // Delay táctico para que el esclavo procese
+		pot1_val = SPI_Transfer(0xFF); // Paso 2: Dummy byte para recibir pot1
+		PORTB |= (1 << PORTB2);      // SS HIGH
 
-		// --- PASO 2: ENVIAR DATO ---
-		SPDR = contador;         // Cargar el dato al registro de transmisión
+		_delay_ms(5);                // Respiro para el esclavo
 
-		// --- PASO 3: ESPERAR FINALIZACIÓN ---
-		// Esperamos a que el bit SPIF se ponga en 1
-		while (!(SPSR & (1 << SPIF)));
-
-		// --- PASO 4: DESACTIVAR ESCLAVO ---
+		// --- OBTENER POT 2 ---
+		PORTB &= ~(1 << PORTB2);     // SS LOW
+		SPI_Transfer(CMD_GET2);      // Paso 1: Enviar comando
 		_delay_us(10);
-		PORTB |= (1 << PORTB2);  // Subir SS a 5V
+		pot2_val = SPI_Transfer(0xFF); // Paso 2: Recibir pot2
+		PORTB |= (1 << PORTB2);      // SS HIGH
 
-		// Incrementar dato para la siguiente vuelta
-		contador++;
-		if (contador > 255) contador = 0;
+		// --- ENVIAR A LA PC ---
+		// Formateamos los valores en una cadena
+		sprintf(msg_buffer, "Pot1: %d | Pot2: %d \r\n", pot1_val, pot2_val);
+		UART_sendString(msg_buffer);
 
-		_delay_ms(500); // Enviar cada medio segundo
+		_delay_ms(250); // Muestreo cada 250ms
 	}
+}
+
+// Función auxiliar para simplificar el flujo
+uint8_t SPI_Transfer(uint8_t data) {
+	SPDR = data;
+	while (!(SPSR & (1 << SPIF)));
+	return SPDR;
 }
 
 
