@@ -6,66 +6,75 @@
 
 #define F_CPU 16000000UL
 #include <avr/io.h>
+#include <avr/interrupt.h>
 #include <util/delay.h>
-#include <stdio.h>    // Para sprintf
+#include <stdio.h>
 #include "UART.h"
 
-// Definición de comandos
-#define CMD_GET1 0x11
-#define CMD_GET2 0x22
+#define CMD_GET1     0x11
+#define CMD_GET2     0x22
+#define CMD_SET_LEDS 0x33
 
-// Prototipo de intercambio SPI
-uint8_t SPI_Transfer(uint8_t data);
+volatile uint8_t dato_pc = 0;
+volatile uint8_t bandera_uart = 0;
 
-int main(void) {
-	// 1. INICIALIZAR UART (9600 bps)
-	UART_Init(UART_BAUD_9600_16MHZ, UART_INTERRUPTS_DISABLED);
-	
-	// 2. INICIALIZAR SPI (Registros Puros)
-	// MOSI (PB3), SCK (PB5) y SS (PB2) como salidas
-	DDRB |= (1 << DDB3) | (1 << DDB5) | (1 << DDB2);
-	// SS en alto (IDLE)
-	PORTB |= (1 << PORTB2);
-	
-	// SPCR: Habilitar, Maestro, Fosc/128 (Seguridad máxima)
-	SPCR = (1 << SPE) | (1 << MSTR) | (1 << SPR1) | (1 << SPR0);
-
-	char msg_buffer[50];
-	uint8_t pot1_val, pot2_val;
-
-	UART_sendString("--- Sistema de Monitoreo Iniciado ---\r\n");
-
-	while (1) {
-		// --- OBTENER POT 1 ---
-		PORTB &= ~(1 << PORTB2);     // SS LOW
-		SPI_Transfer(CMD_GET1);      // Paso 1: Enviar comando
-		_delay_us(10);               // Delay táctico para que el esclavo procese
-		pot1_val = SPI_Transfer(0xFF); // Paso 2: Dummy byte para recibir pot1
-		PORTB |= (1 << PORTB2);      // SS HIGH
-
-		_delay_ms(5);                // Respiro para el esclavo
-
-		// --- OBTENER POT 2 ---
-		PORTB &= ~(1 << PORTB2);     // SS LOW
-		SPI_Transfer(CMD_GET2);      // Paso 1: Enviar comando
-		_delay_us(10);
-		pot2_val = SPI_Transfer(0xFF); // Paso 2: Recibir pot2
-		PORTB |= (1 << PORTB2);      // SS HIGH
-
-		// --- ENVIAR A LA PC ---
-		// Formateamos los valores en una cadena
-		sprintf(msg_buffer, "Pot1: %d | Pot2: %d \r\n", pot1_val, pot2_val);
-		UART_sendString(msg_buffer);
-
-		_delay_ms(250); // Muestreo cada 250ms
-	}
-}
-
-// Función auxiliar para simplificar el flujo
+// Función de intercambio que ya probamos
 uint8_t SPI_Transfer(uint8_t data) {
 	SPDR = data;
 	while (!(SPSR & (1 << SPIF)));
 	return SPDR;
+}
+
+int main(void) {
+	UART_Init(UART_BAUD_9600_16MHZ, UART_INTERRUPTS_ENABLED);
+	
+	// SPI Maestro
+	DDRB |= (1 << DDB3) | (1 << DDB5) | (1 << DDB2);
+	PORTB |= (1 << PORTB2);
+	SPCR = (1 << SPE) | (1 << MSTR) | (1 << SPR1) | (1 << SPR0);
+
+	sei();
+	char buffer[50];
+
+	while (1) {
+		// --- TAREA A: ¿Hay dato nuevo de la PC? ---
+		if (bandera_uart) {
+			PORTB &= ~(1 << PORTB2);
+			SPI_Transfer(CMD_SET_LEDS); // Avisar al esclavo
+			_delay_us(20);
+			SPI_Transfer(dato_pc);      // Enviar el dato real
+			PORTB |= (1 << PORTB2);
+			bandera_uart = 0;           // Limpiar bandera
+		}
+
+		// --- TAREA B: Pedir Potenciómetros (Tu lógica anterior) ---
+		uint8_t p1, p2;
+		
+		PORTB &= ~(1 << PORTB2);
+		SPI_Transfer(CMD_GET1);
+		_delay_us(20);
+		p1 = SPI_Transfer(0xFF);
+		PORTB |= (1 << PORTB2);
+
+		_delay_ms(10);
+
+		PORTB &= ~(1 << PORTB2);
+		SPI_Transfer(CMD_GET2);
+		_delay_us(20);
+		p2 = SPI_Transfer(0xFF);
+		PORTB |= (1 << PORTB2);
+
+		// Reportar a la PC
+		sprintf(buffer, "P1:%d P2:%d\r\n", p1, p2);
+		UART_sendString(buffer);
+
+		_delay_ms(200);
+	}
+}
+
+ISR(USART_RX_vect) {
+	dato_pc = UDR0;
+	bandera_uart = 1;
 }
 
 
